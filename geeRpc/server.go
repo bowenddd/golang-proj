@@ -13,7 +13,7 @@ import (
 
 const MagicNumber = 0x3bef5c //magic number代表使用geeRpc进行通信
 
-// Option 使用json格式进行编解码，解码后得到codec.Type，之火的header和body根据codec.Type继续编解码
+// Option 使用json格式进行编解码，解码后得到codec.Type，之后的header和body根据codec.Type继续编解码
 type Option struct {
 	MagicNumber int // 表示使用的RPC协议的类型
 	CodecType   codec.Type
@@ -114,7 +114,7 @@ func (s *Server) readRequest(cc codec.Codec) (*request, error) {
 		h: header,
 	}
 	// TODO: now we don't know the type of request argv
-	// day 1, just suppose it's string
+	// day 1, just suppose it is string
 	req.argv = reflect.New(reflect.TypeOf(""))
 	if err := cc.ReadBody(req.argv.Interface()); err != nil {
 		log.Println("rpc server: read argv err:", err)
@@ -126,6 +126,8 @@ func (s *Server) readRequest(cc codec.Codec) (*request, error) {
 func (s *Server) handleRequest(cc codec.Codec, req *request, sending *sync.Mutex, wg *sync.WaitGroup) {
 	defer wg.Done()
 	log.Println(req.h, req.argv.Elem())
+	// TODO: implement to run the command according to the args
+	// day 1, just reply a string
 	req.replyv = reflect.ValueOf(fmt.Sprintf("geerpc resp %d", req.h.Seq))
 	s.sendResponse(cc, req.h, req.replyv.Interface(), sending)
 }

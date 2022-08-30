@@ -26,6 +26,8 @@ const (
 
 var NewCodecFuncMap map[Type]NewCodecFunc
 
+// init()函数会自动执行，进行一些初始化操作
+// init()函数的执行顺序  import -> const -> var -> init()
 func init() {
 	NewCodecFuncMap = make(map[Type]NewCodecFunc)
 	// 工厂模式，不过这里返回的是构造方法而不是实例
