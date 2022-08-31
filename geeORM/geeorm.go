@@ -2,14 +2,14 @@ package geeorm
 
 import (
 	"database/sql"
-	"geeorm/dialet"
+	"geeorm/dialect"
 	"geeorm/log"
 	"geeorm/session"
 )
 
 type Engine struct {
 	db      *sql.DB
-	dialect dialet.Dialect
+	dialect dialect.Dialect
 }
 
 func NewEngine(driver, source string) (engine *Engine, err error) {
@@ -22,7 +22,7 @@ func NewEngine(driver, source string) (engine *Engine, err error) {
 		log.Error(err)
 		return
 	}
-	dialect, ok := dialet.GetDialect(driver)
+	dialect, ok := dialect.GetDialect(driver)
 	if !ok {
 		log.Errorf("dialect %s Not Found", driver)
 		return

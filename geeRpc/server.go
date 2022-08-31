@@ -2,12 +2,13 @@ package geeRpc
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"geeRpc/codec"
 	"io"
 	"log"
 	"net"
 	"reflect"
+	"strings"
 	"sync"
 )
 
@@ -25,6 +26,7 @@ var DefaultOption = &Option{
 }
 
 type Server struct {
+	ServiceMap sync.Map
 }
 
 func NewServer() *Server {
@@ -32,6 +34,38 @@ func NewServer() *Server {
 }
 
 var DefaultServer = NewServer()
+
+func (s *Server) Register(rcvr interface{}) error {
+	serv := newService(rcvr)
+	if _, dup := s.ServiceMap.LoadOrStore(serv.name, serv); dup {
+		return errors.New("rpc: service already defined: " + serv.name)
+	}
+	return nil
+}
+
+func Register(rcvr interface{}) error {
+	return DefaultServer.Register(rcvr)
+}
+
+func (s *Server) findService(serviceMethod string) (svc *service, mtype *methodType, err error) {
+	dot := strings.LastIndex(serviceMethod, ".")
+	if dot < 0 {
+		err = errors.New("rpc server: service/method request ill-formed: " + serviceMethod)
+	}
+	serviceName, methodName := serviceMethod[:dot], serviceMethod[dot+1:]
+	svci, ok := s.ServiceMap.Load(serviceName)
+	if !ok {
+		err = errors.New("rpc server: can't find service " + serviceName)
+		return
+	}
+	svc = svci.(*service)
+	mtype = svc.method[methodName]
+	if mtype == nil {
+		err = errors.New("rpc server: can't find method " + methodName)
+		return
+	}
+	return
+}
 
 func (s *Server) Accept(lis net.Listener) {
 	for {
@@ -92,6 +126,8 @@ func (s *Server) serveCodec(cc codec.Codec) {
 type request struct {
 	h            *codec.Header
 	argv, replyv reflect.Value
+	mtype        *methodType
+	svc          *service
 }
 
 func (s *Server) readRequestHeader(cc codec.Codec) (*codec.Header, error) {
@@ -110,25 +146,35 @@ func (s *Server) readRequest(cc codec.Codec) (*request, error) {
 	if err != nil {
 		return nil, err
 	}
-	req := request{
+	req := &request{
 		h: header,
 	}
-	// TODO: now we don't know the type of request argv
-	// day 1, just suppose it is string
-	req.argv = reflect.New(reflect.TypeOf(""))
-	if err := cc.ReadBody(req.argv.Interface()); err != nil {
-		log.Println("rpc server: read argv err:", err)
-		return nil, err
+	req.svc, req.mtype, err = s.findService(header.ServiceMethod)
+	if err != nil {
+		return req, err
 	}
-	return &req, nil
+	req.argv = req.mtype.newArgv()
+	req.replyv = req.mtype.newReplyv()
+	// make sure that argvi is a pointer, ReadBody need a pointer as parameter
+	argvi := req.argv.Interface()
+	if req.argv.Type().Kind() != reflect.Ptr {
+		argvi = req.argv.Addr().Interface()
+	}
+	if err := cc.ReadBody(argvi); err != nil {
+		log.Println("rpc server: read body err:", err)
+		return req, err
+	}
+	return req, nil
 }
 
 func (s *Server) handleRequest(cc codec.Codec, req *request, sending *sync.Mutex, wg *sync.WaitGroup) {
 	defer wg.Done()
-	log.Println(req.h, req.argv.Elem())
-	// TODO: implement to run the command according to the args
-	// day 1, just reply a string
-	req.replyv = reflect.ValueOf(fmt.Sprintf("geerpc resp %d", req.h.Seq))
+	err := req.svc.call(req.mtype, req.argv, req.replyv)
+	if err != nil {
+		req.h.Err = err.Error()
+		s.sendResponse(cc, req.h, invalidRequest, sending)
+		return
+	}
 	s.sendResponse(cc, req.h, req.replyv.Interface(), sending)
 }
 

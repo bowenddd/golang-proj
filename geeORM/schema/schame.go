@@ -1,7 +1,7 @@
 package schema
 
 import (
-	"geeorm/dialet"
+	"geeorm/dialect"
 	"go/ast"
 	"reflect"
 )
@@ -24,7 +24,7 @@ func (s *Schema) GetField(name string) *Field {
 	return s.fieldMap[name]
 }
 
-func Parse(dest interface{}, d dialet.Dialect) *Schema {
+func Parse(dest interface{}, d dialect.Dialect) *Schema {
 	modelType := reflect.Indirect(reflect.ValueOf(dest)).Type()
 	schame := &Schema{
 		Model:    dest,
@@ -48,4 +48,13 @@ func Parse(dest interface{}, d dialet.Dialect) *Schema {
 		}
 	}
 	return schame
+}
+
+func (s *Schema) RecordValues(dest interface{}) []interface{} {
+	destValue := reflect.Indirect(reflect.ValueOf(dest))
+	var fieldValues []interface{}
+	for _, field := range s.Fields {
+		fieldValues = append(fieldValues, destValue.FieldByName(field.Name).Interface())
+	}
+	return fieldValues
 }

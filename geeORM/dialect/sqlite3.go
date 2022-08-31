@@ -1,4 +1,4 @@
-package dialet
+package dialect
 
 import (
 	"fmt"

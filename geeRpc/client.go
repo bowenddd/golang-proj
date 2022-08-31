@@ -58,7 +58,7 @@ func (c *Client) IsAvailable() bool {
 }
 
 // args: call
-// return : call's seq
+// return : call's seq and error
 func (c *Client) registerCall(call *Call) (uint64, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -91,6 +91,7 @@ func (c *Client) terminateCalls(err error) {
 	}
 }
 
+// client receive the reply from the server
 func (c *Client) receive() {
 	var err error
 	for err == nil {
@@ -107,6 +108,9 @@ func (c *Client) receive() {
 			err = c.cc.ReadBody(nil)
 			call.done()
 		default:
+			// ⚠️注意：客户端向服务器发送的RPC包含两部分，header和body，body只包含call的args
+			// 服务端收到请求后根据header中的serviceMethod和body中的args调用相关方法，并只返回
+			// reply，因此客户端接受到的body中只包含reply
 			err = c.cc.ReadBody(call.Reply)
 			if err != nil {
 				call.Error = fmt.Errorf("reading body" + err.Error())
