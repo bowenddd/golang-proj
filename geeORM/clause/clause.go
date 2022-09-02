@@ -16,6 +16,9 @@ const (
 	LIMIT
 	WHERE
 	ORDERBY
+	UPDATE
+	DELETE
+	COUNT
 )
 
 func (c *Clause) Set(name Type, vars ...interface{}) {
@@ -29,6 +32,10 @@ func (c *Clause) Set(name Type, vars ...interface{}) {
 }
 
 func (c *Clause) Build(orders ...Type) (string, []interface{}) {
+	defer func() {
+		c.sql = nil
+		c.sqlVars = nil
+	}()
 	var sqls []string
 	var vars []interface{}
 	for _, order := range orders {

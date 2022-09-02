@@ -64,3 +64,64 @@ func TestSession_Find(t *testing.T) {
 		t.Fatal("failed to query all")
 	}
 }
+
+func TestSession_Limit(t *testing.T) {
+	s := testRecordInit(t)
+	var users []User
+	err := s.Limit(1).Find(&users)
+	if err != nil || len(users) != 1 {
+		t.Fatal("failed to query with limit condition")
+	}
+}
+
+func TestSession_Update(t *testing.T) {
+	s := testRecordInit(t)
+	affected, _ := s.Where("Name = ?", "Tom").Update("Age", 30)
+	u := &User{}
+	_ = s.OrderBy("Age DESC").First(u)
+
+	if affected != 1 || u.Age != 30 {
+		t.Fatal("failed to update")
+	}
+}
+
+func TestSession_DeleteAndCount(t *testing.T) {
+	s := testRecordInit(t)
+	affected, _ := s.Where("Name = ?", "Tom").Delete()
+	count, _ := s.Count()
+
+	if affected != 1 || count != 1 {
+		t.Fatal("failed to delete or count")
+	}
+}
+
+type Account struct {
+	ID       int `geeorm:"PRIMARY KEY"`
+	Password string
+}
+
+func (account *Account) BeforeInsert(s *Session) error {
+	log.Info("before inert", account)
+	account.ID += 1000
+	return nil
+}
+
+func (account *Account) AfterQuery(s *Session) error {
+	log.Info("after query", account)
+	account.Password = "******"
+	return nil
+}
+
+func TestSession_CallMethod(t *testing.T) {
+	s := NewSession().Model(&Account{})
+	_ = s.DropTable()
+	_ = s.CreateTable()
+	_, _ = s.Insert(&Account{1, "123456"}, &Account{2, "qwerty"})
+
+	u := &Account{}
+
+	err := s.First(u)
+	if err != nil || u.ID != 1001 || u.Password != "******" {
+		t.Fatal("Failed to call hooks after query, got", u)
+	}
+}
