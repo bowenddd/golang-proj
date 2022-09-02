@@ -1,6 +1,7 @@
 package geeRpc
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
 )
 
 type Call struct {
@@ -31,6 +33,13 @@ type Client struct {
 	closing  bool
 	shutdown bool
 }
+
+type clientResult struct {
+	client *Client
+	err    error
+}
+
+type newClientFunc func(conn net.Conn, opt *Option) (client *Client, err error)
 
 // the method is used for supporting async
 func (c *Call) done() {
@@ -161,12 +170,12 @@ func parseOption(opts ...*Option) (*Option, error) {
 	return opt, nil
 }
 
-func Dial(network, addr string, opts ...*Option) (client *Client, err error) {
+func dialTimeOut(f newClientFunc, network, addr string, opts ...*Option) (client *Client, err error) {
 	opt, err := parseOption(opts...)
 	if err != nil {
 		return nil, err
 	}
-	conn, err := net.Dial(network, addr)
+	conn, err := net.DialTimeout(network, addr, opt.ConnectTimeOut)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +184,37 @@ func Dial(network, addr string, opts ...*Option) (client *Client, err error) {
 			_ = conn.Close()
 		}
 	}()
-	return NewClient(conn, opt)
+	ch := make(chan clientResult)
+	finish := make(chan struct{})
+	defer func() {
+		close(finish)
+	}()
+	go func() {
+		client, err := f(conn, opt)
+		select {
+		case <-finish:
+			close(ch)
+			return
+		case ch <- clientResult{client: client, err: err}:
+			return
+		}
+	}()
+	if opt.ConnectTimeOut == 0 {
+		result := <-ch
+		return result.client, result.err
+	}
+	select {
+	case <-time.After(opt.ConnectTimeOut):
+		finish <- struct{}{}
+		return nil, fmt.Errorf("rpc client: connect timeout: expect within %s", opt.ConnectTimeOut)
+	case result := <-ch:
+		return result.client, result.err
+	}
+
+}
+
+func Dial(network, addr string, opts ...*Option) (client *Client, err error) {
+	return dialTimeOut(NewClient, network, addr, opts...)
 }
 
 func (c *Client) send(call *Call) {
@@ -216,7 +255,14 @@ func (c *Client) Go(serviceMethod string, args, reply interface{}, done chan *Ca
 	return call
 }
 
-func (c *Client) Call(serviceMethod string, args, reply interface{}) error {
-	call := <-c.Go(serviceMethod, args, reply, make(chan *Call, 1)).Done
+func (c *Client) Call(ctx context.Context, serviceMethod string, args, reply interface{}) error {
+	call := c.Go(serviceMethod, args, reply, make(chan *Call, 1))
+	select {
+	case <-ctx.Done():
+		c.removeCall(call.Seq)
+		return errors.New("rpc client: call failed: " + ctx.Err().Error())
+	case call := <-call.Done:
+		return call.Error
+	}
 	return call.Error
 }
