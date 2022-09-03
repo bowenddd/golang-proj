@@ -229,7 +229,7 @@ func DialHTTP(network, addr string, opts ...*Option) (client *Client, err error)
 // rpcAddr is a general format (protocol@addr) to represent a rpc server
 // eg, http@10.0.0.1:7001, tcp@10.0.0.1:9999, unix@/tmp/geerpc.sock
 
-func DialX(rpcAddr string, opts ...*Option) (client *Client, err error) {
+func XDial(rpcAddr string, opts ...*Option) (client *Client, err error) {
 	parts := strings.Split(rpcAddr, "@")
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("rpc client err: wrong format '%s', expect protocol@addr", rpcAddr)

@@ -113,7 +113,7 @@ func (account *Account) AfterQuery(s *Session) error {
 }
 
 func TestSession_CallMethod(t *testing.T) {
-	s := NewSession().Model(&Account{})
+	s := NewSession().Model(Account{})
 	_ = s.DropTable()
 	_ = s.CreateTable()
 	_, _ = s.Insert(&Account{1, "123456"}, &Account{2, "qwerty"})
