@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"geeRpc"
+	"geeRpc/registry"
 	"geeRpc/xclient"
 	"log"
 	"net"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -27,12 +29,20 @@ func (f Foo) Sleep(args Args, reply *int) error {
 	return nil
 }
 
-func startServer(addr chan string) {
+func startRegistry(wg *sync.WaitGroup) {
+	l, _ := net.Listen("tcp", ":9999")
+	registry.HandleHTTP()
+	wg.Done()
+	_ = http.Serve(l, nil)
+}
+
+func startServer(registryAddr string, wg *sync.WaitGroup) {
 	var foo Foo
 	l, _ := net.Listen("tcp", ":0")
 	server := geeRpc.NewServer()
 	_ = server.Register(&foo)
-	addr <- l.Addr().String()
+	registry.Heartbeat(registryAddr, "tcp@"+l.Addr().String(), 0)
+	wg.Done()
 	server.Accept(l)
 }
 
@@ -52,8 +62,8 @@ func foo(xc *xclient.XClient, ctx context.Context, typ, serviceMethod string, ar
 	}
 }
 
-func call(addr1, addr2 string) {
-	d := xclient.NewMultiServersDiscovery([]string{"tcp@" + addr1, "tcp@" + addr2})
+func call(registryAddr string) {
+	d := xclient.NewGeeRegistryDiscovery(registryAddr, 0)
 	xc := xclient.NewXClient(d, xclient.RandomSelect, nil)
 	defer func() {
 		_ = xc.Close()
@@ -71,8 +81,8 @@ func call(addr1, addr2 string) {
 	wg.Wait()
 }
 
-func broadcast(addr1, addr2 string) {
-	d := xclient.NewMultiServersDiscovery([]string{"tcp@" + addr1, "tcp@" + addr2})
+func broadcast(registryAddr string) {
+	d := xclient.NewGeeRegistryDiscovery(registryAddr, 0)
 	xc := xclient.NewXClient(d, xclient.RandomSelect, nil)
 	defer func() { _ = xc.Close() }()
 	var wg sync.WaitGroup
@@ -91,14 +101,21 @@ func broadcast(addr1, addr2 string) {
 
 func main() {
 	log.SetFlags(0)
-	addr1 := make(chan string)
-	addr2 := make(chan string)
-	go startServer(addr1)
-	go startServer(addr2)
-	ad1 := <-addr1
-	ad2 := <-addr2
-	//call(ad1, ad2)
-	broadcast(ad1, ad2)
+	registryAddr := "http://localhost:9999/_geerpc_/registry"
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go startRegistry(&wg)
+	wg.Wait()
+
+	time.Sleep(time.Second)
+	wg.Add(2)
+	go startServer(registryAddr, &wg)
+	go startServer(registryAddr, &wg)
+	wg.Wait()
+
+	time.Sleep(time.Second)
+	//call(registryAddr)
+	broadcast(registryAddr)
 }
 
 //package main
