@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"geeRpc"
 	"geeRpc/registry"
 	"geeRpc/xclient"
 	"log"
 	"net"
 	"net/http"
+	"reflect"
 	"sync"
 	"time"
 )
@@ -99,23 +101,46 @@ func broadcast(registryAddr string) {
 	wg.Wait()
 }
 
+//func main() {
+//	log.SetFlags(0)
+//	registryAddr := "http://localhost:9999/_geerpc_/registry"
+//	var wg sync.WaitGroup
+//	wg.Add(1)
+//	go startRegistry(&wg)
+//	wg.Wait()
+//
+//	time.Sleep(time.Second)
+//	wg.Add(2)
+//	go startServer(registryAddr, &wg)
+//	go startServer(registryAddr, &wg)
+//	wg.Wait()
+//
+//	time.Sleep(time.Second)
+//	//call(registryAddr)
+//	broadcast(registryAddr)
+//}
+
+type User struct {
+	name string
+	age  int
+	addr string
+}
+
 func main() {
-	log.SetFlags(0)
-	registryAddr := "http://localhost:9999/_geerpc_/registry"
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go startRegistry(&wg)
-	wg.Wait()
+	uu := User{"tom", 27, "beijing"}
+	u := &uu
+	v := reflect.ValueOf(u).Interface()
 
-	time.Sleep(time.Second)
-	wg.Add(2)
-	go startServer(registryAddr, &wg)
-	go startServer(registryAddr, &wg)
-	wg.Wait()
+	fmt.Println("ValueOf=", reflect.ValueOf(v).Elem())
 
-	time.Sleep(time.Second)
-	//call(registryAddr)
-	broadcast(registryAddr)
+	t := reflect.TypeOf(v)
+	fmt.Println("TypeOf=", t)
+
+	t1 := reflect.Indirect(reflect.ValueOf(v)).Type()
+	fmt.Println("t1=", t1)
+
+	t2 := reflect.TypeOf(v).Elem()
+	fmt.Println("t2=", t2)
 }
 
 //package main

@@ -13,6 +13,9 @@ func (s *Session) Begin() (err error) {
 
 func (s *Session) Commit() (err error) {
 	log.Info("transaction commit")
+	defer func() {
+		s.tx = nil
+	}()
 	if err = s.tx.Commit(); err != nil {
 		log.Error(err)
 		return err
@@ -21,6 +24,9 @@ func (s *Session) Commit() (err error) {
 }
 
 func (s *Session) Rollback() (err error) {
+	defer func() {
+		s.tx = nil
+	}()
 	log.Info("transaction rollback")
 	if err = s.tx.Rollback(); err != nil {
 		log.Error(err)
